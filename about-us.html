@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Benih Berani School — Sekolah Jenjang PG, TK, SDS, dan SMPS di Kota Batam.">
+    <title>About Us - Benih Berani School</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+  /* Style Karakter Huruf */
+  .phys-char {
+    display: inline-block;
+    white-space: pre;
+    transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s ease, color 0.2s ease;
+    will-change: transform, opacity;
+    user-select: none;
+    -webkit-user-select: none;
+    position: relative;
+    z-index: 2;
+  }
+
+  /* Huruf saat ter-blok */
+  .phys-char.is-selected {
+    color: #ffffff !important;
+    text-shadow: 0 2px 10px rgba(255, 255, 255, 0.6);
+  }
+
+  /* Marker Biru Polos 50% Transparan (Tanpa Outline) */
+  #phys-selection-marker {
+    position: absolute;
+    background-color: rgba(37, 99, 235, 0.5) !important;
+    border: none !important;
+    outline: none !important;
+    border-radius: 6px;
+    pointer-events: none; /* Penting agar tidak menghalangi deteksi kursor */
+    z-index: 1;
+    transition: left 0.12s ease-out, top 0.12s ease-out, width 0.12s ease-out, height 0.12s ease-out, opacity 0.2s ease;
+    opacity: 0;
+    box-shadow: 0 0 20px rgba(37, 99, 235, 0.3);
+  }
+
+  /* Floating Context Menu Popup */
+  #phys-context-menu {
+    position: fixed;
+    z-index: 999999;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(6px) scale(0.95);
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+    visibility: hidden;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+
+  #phys-context-menu.active {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+    visibility: visible;
+  }
+
+  .phys-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #f8fafc;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .phys-btn:hover {
+    background: rgba(59, 130, 246, 0.85);
+    color: #ffffff;
+    border-color: rgba(96, 165, 250, 0.5);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+  }
+
+  .phys-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 700;
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    text-transform: uppercase;
+  }
+
+  .phys-btn-cancel {
+    background: transparent;
+    border-color: transparent;
+    color: #94a3b8;
+  }
+
+  .phys-btn-cancel:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    border-color: rgba(239, 68, 68, 0.3);
+  }
+
+  /* Toast Notification */
+  #phys-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: #0f172a;
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    padding: 10px 20px;
+    border-radius: 30px;
+    font-size: 13px;
+    font-weight: 500;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: 1000000;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+    font-family: system-ui, sans-serif;
+  }
+
+  #phys-toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+</style>
+
+<script>
+  (function () {
+    const CONFIG = {
+      liftHeight: -8,       // Ketinggian terangkat (-8px)
+      scaleAmount: 1.15,    // Ukuran membesar (1.15x)
+      opacityAmount: 0.85,  // Transparansi (0.85)
+      mouseStopDelay: 180,  // Delay diam mouse (ms) sebelum menu muncul
+    };
+
+    let isSelecting = false;
+    let startChar = null;
+    let selectedChars = [];
+    let allCharsCache = [];
+    let mouseStopTimer = null;
+    let lastHoveredChar = null;
+
+    // Build Elements
+    const marker = document.createElement('div');
+    marker.id = 'phys-selection-marker';
+    document.body.appendChild(marker);
+
+    const menu = document.createElement('div');
+    menu.id = 'phys-context-menu';
+    menu.innerHTML = `
+      <button class="phys-btn" id="phys-btn-copy">
+        <span>Copy</span>
+        <span class="phys-badge">C</span>
+      </button>
+      <button class="phys-btn" id="phys-btn-search">
+        <span>Cari Tau</span>
+        <span class="phys-badge">T</span>
+      </button>
+      <button class="phys-btn phys-btn-cancel" id="phys-btn-cancel">
+        <span>Cancel</span>
+      </button>
+    `;
+    document.body.appendChild(menu);
+
+    const toast = document.createElement('div');
+    toast.id = 'phys-toast';
+    document.body.appendChild(toast);
+
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2000);
+    }
+
+    function processTextNodes(element) {
+      if (!element) return;
+      const ignoredTags = ['SCRIPT', 'STYLE', 'INPUT', 'TEXTAREA', 'BUTTON', 'SELECT', 'SVG', 'CODE'];
+      if (ignoredTags.includes(element.tagName)) return;
+
+      const childNodes = Array.from(element.childNodes);
+      childNodes.forEach(node => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const text = node.nodeValue;
+          if (text.trim().length > 0) {
+            const fragment = document.createDocumentFragment();
+            for (let i = 0; i < text.length; i++) {
+              const span = document.createElement('span');
+              span.className = 'phys-char';
+              span.textContent = text[i];
+              fragment.appendChild(span);
+            }
+            node.parentNode.replaceChild(fragment, node);
+          }
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+          processTextNodes(node);
+        }
+      });
+    }
+
+    function initPhysicsText() {
+      const targets = document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, span, a, div.physics-text');
+      targets.forEach(el => {
+        if (!el.querySelector('.phys-char') && !el.closest('#phys-context-menu')) {
+          processTextNodes(el);
+        }
+      });
+      bindEvents();
+    }
+
+    function clearSelection() {
+      selectedChars.forEach(c => {
+        c.classList.remove('is-selected');
+        c.style.transform = '';
+        c.style.opacity = '';
+      });
+      selectedChars = [];
+      marker.style.opacity = '0';
+      menu.classList.remove('active');
+      startChar = null;
+      isSelecting = false;
+      lastHoveredChar = null;
+    }
+
+    function updateMarkerPosition() {
+      if (selectedChars.length === 0) return;
+
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+      selectedChars.forEach(char => {
+        const rect = char.getBoundingClientRect();
+        if (rect.left < minX) minX = rect.left;
+        if (rect.top < minY) minY = rect.top;
+        if (rect.right > maxX) maxX = rect.right;
+        if (rect.bottom > maxY) maxY = rect.bottom;
+      });
+
+      const scrollX = window.scrollX || window.pageXOffset;
+      const scrollY = window.scrollY || window.pageYOffset;
+
+      const padding = 2;
+      marker.style.left = `${minX + scrollX - padding}px`;
+      marker.style.top = `${minY + scrollY - padding}px`;
+      marker.style.width = `${(maxX - minX) + (padding * 2)}px`;
+      marker.style.height = `${(maxY - minY) + (padding * 2)}px`;
+      marker.style.opacity = '1';
+    }
+
+    function showMenu() {
+      if (selectedChars.length === 0) return;
+
+      let minX = Infinity, minY = Infinity, maxX = -Infinity;
+      selectedChars.forEach(char => {
+        const rect = char.getBoundingClientRect();
+        if (rect.left < minX) minX = rect.left;
+        if (rect.top < minY) minY = rect.top;
+        if (rect.right > maxX) maxX = rect.right;
+      });
+
+      const centerX = minX + (maxX - minX) / 2;
+      const menuWidth = menu.offsetWidth || 210;
+
+      let left = centerX - (menuWidth / 2);
+      let top = minY - 48;
+
+      if (top < 10) top = minY + 30;
+      if (left < 10) left = 10;
+      if (left + menuWidth > window.innerWidth - 10) left = window.innerWidth - menuWidth - 10;
+
+      menu.style.left = `${left}px`;
+      menu.style.top = `${top}px`;
+      menu.classList.add('active');
+    }
+
+    function hideMenu() {
+      menu.classList.remove('active');
+    }
+
+    function bindEvents() {
+      // Hover Effect Individu
+      document.addEventListener('mouseover', (e) => {
+        const char = e.target.closest('.phys-char');
+        if (char && !isSelecting && !char.classList.contains('is-selected')) {
+          char.style.transform = `translateY(${CONFIG.liftHeight}px) scale(${CONFIG.scaleAmount})`;
+          char.style.opacity = CONFIG.opacityAmount;
+        }
+      });
+
+      document.addEventListener('mouseout', (e) => {
+        const char = e.target.closest('.phys-char');
+        if (char && !char.classList.contains('is-selected')) {
+          char.style.transform = '';
+          char.style.opacity = '';
+        }
+      });
+
+      // Mousedown pada Huruf (Mulai Blok)
+      document.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return; // Hanya klik kiri
+        const char = e.target.closest('.phys-char');
+        if (char) {
+          isSelecting = true;
+          startChar = char;
+          allCharsCache = Array.from(document.querySelectorAll('.phys-char'));
+          clearSelection();
+
+          isSelecting = true;
+          startChar = char;
+          selectedChars = [char];
+
+          char.classList.add('is-selected');
+          char.style.transform = `translateY(${CONFIG.liftHeight}px) scale(${CONFIG.scaleAmount})`;
+          char.style.opacity = CONFIG.opacityAmount;
+
+          updateMarkerPosition();
+          e.preventDefault();
+        } else if (!menu.contains(e.target)) {
+          clearSelection();
+        }
+      });
+
+      // Global Mousemove Tracking untuk Multi-Letter Selection
+      document.addEventListener('mousemove', (e) => {
+        if (isSelecting && startChar) {
+          const elementAtMouse = document.elementFromPoint(e.clientX, e.clientY);
+          const currentChar = elementAtMouse ? elementAtMouse.closest('.phys-char') : null;
+
+          if (currentChar && currentChar !== lastHoveredChar) {
+            lastHoveredChar = currentChar;
+            const idxA = allCharsCache.indexOf(startChar);
+            const idxB = allCharsCache.indexOf(currentChar);
+
+            if (idxA !== -1 && idxB !== -1) {
+              const startIdx = Math.min(idxA, idxB);
+              const endIdx = Math.max(idxA, idxB);
+
+              allCharsCache.forEach((c, idx) => {
+                if (idx >= startIdx && idx <= endIdx) {
+                  c.classList.add('is-selected');
+                  c.style.transform = `translateY(${CONFIG.liftHeight}px) scale(${CONFIG.scaleAmount})`;
+                  c.style.opacity = CONFIG.opacityAmount;
+                } else {
+                  c.classList.remove('is-selected');
+                  c.style.transform = '';
+                  c.style.opacity = '';
+                }
+              });
+
+              selectedChars = allCharsCache.slice(startIdx, endIdx + 1);
+              updateMarkerPosition();
+            }
+          }
+        }
+
+        // Penyembunyian Menu saat Mouse Bergerak
+        if (selectedChars.length > 0) {
+          hideMenu();
+          clearTimeout(mouseStopTimer);
+
+          mouseStopTimer = setTimeout(() => {
+            showMenu();
+          }, CONFIG.mouseStopDelay);
+        }
+      });
+
+      // Mouse Up (Selesai Blok)
+      document.addEventListener('mouseup', () => {
+        if (isSelecting) {
+          isSelecting = false;
+          clearTimeout(mouseStopTimer);
+          if (selectedChars.length > 0) {
+            showMenu();
+          }
+        }
+      });
+
+      // Handlers Opsi Menu
+      document.getElementById('phys-btn-copy').addEventListener('click', doCopy);
+      document.getElementById('phys-btn-search').addEventListener('click', doSearch);
+      document.getElementById('phys-btn-cancel').addEventListener('click', clearSelection);
+
+      // Shortcut Keyboard
+      document.addEventListener('keydown', (e) => {
+        if (selectedChars.length === 0) return;
+        const key = e.key.toLowerCase();
+        if (key === 'c') {
+          e.preventDefault();
+          doCopy();
+        } else if (key === 't') {
+          e.preventDefault();
+          doSearch();
+        } else if (key === 'escape') {
+          clearSelection();
+        }
+      });
+    }
+
+    function getSelectedText() {
+      return selectedChars.map(c => c.textContent).join('');
+    }
+
+    function doCopy() {
+      const text = getSelectedText();
+      if (!text) return;
+
+      navigator.clipboard.writeText(text).then(() => {
+        showToast(`Tercopy: "${text.length > 18 ? text.substring(0, 18) + '...' : text}"`);
+        clearSelection();
+      }).catch(() => {
+        showToast('Gagal menyalin teks');
+      });
+    }
+
+    function doSearch() {
+      const text = getSelectedText();
+      if (!text) return;
+
+      const url = `https://www.google.com/search?q=${encodeURIComponent(text)}`;
+      window.open(url, '_blank');
+      clearSelection();
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initPhysicsText);
+    } else {
+      initPhysicsText();
+    }
+  })();
+</script>
+  </head>
+  <body>
+  </body>
+</html>
